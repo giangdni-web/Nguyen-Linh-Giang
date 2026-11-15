@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user profile and notification/contact preferences",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "Full display name" },
+        "email": { "type": "string", "description": "User email address" },
+        "phoneNumber": { "type": "string", "description": "Optional Zalo/phone contact" },
+        "notifyOnReply": { "type": "boolean", "description": "Notify automatically on new legal reply" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "displayName", "email", "notifyOnReply", "createdAt", "updatedAt"]
+    },
+    "ConsultationSession": {
+      "title": "ConsultationSession",
+      "description": "Legal Q&A consultation thread scoped to a legal domain",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "title": { "type": "string", "description": "Consultation topic summary" },
+        "category": { "type": "string", "enum": ["civil", "enforcement", "land", "family", "general"] },
+        "lastMessagePreview": { "type": "string", "description": "Preview of latest reply or question" },
+        "messageCount": { "type": "integer", "description": "Number of messages in thread" },
+        "status": { "type": "string", "enum": ["active", "resolved"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "category", "lastMessagePreview", "messageCount", "status", "createdAt", "updatedAt"]
+    },
+    "ConsultationMessage": {
+      "title": "ConsultationMessage",
+      "description": "Individual message inside a legal consultation session",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "sender": { "type": "string", "enum": ["user", "advisor"] },
+        "content": { "type": "string", "description": "Message body text" },
+        "legalCitations": { "type": "string", "description": "Cited Vietnamese legal articles" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "sender", "content", "createdAt"]
+    },
+    "LawBookmark": {
+      "title": "LawBookmark",
+      "description": "Bookmarked Vietnamese legal document or article",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "documentId": { "type": "string", "description": "Catalog law document identifier" },
+        "articleCode": { "type": "string", "description": "Article or law number" },
+        "title": { "type": "string", "description": "Law title" },
+        "category": { "type": "string", "enum": ["civil", "enforcement", "land", "family"] },
+        "note": { "type": "string", "description": "Optional personal legal note" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "documentId", "articleCode", "title", "category", "createdAt"]
+    },
+    "LegalReminder": {
+      "title": "LegalReminder",
+      "description": "Scheduled legal deadline, court date, or consultation reminder",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "title": { "type": "string", "description": "Reminder title" },
+        "category": { "type": "string", "enum": ["civil", "enforcement", "land", "family", "general"] },
+        "dueDateMillis": { "type": "integer", "description": "Scheduled timestamp in epoch ms" },
+        "note": { "type": "string", "description": "Optional reminder details" },
+        "isCompleted": { "type": "boolean" },
+        "notifyEnabled": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "category", "dueDateMillis", "isCompleted", "notifyEnabled", "createdAt", "updatedAt"]
+    },
+    "ConsultationOrder": {
+      "title": "ConsultationOrder",
+      "description": "Paid deep consultation booking and Agribank VietQR payment record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "packageId": { "type": "string" },
+        "packageTitle": { "type": "string" },
+        "amountVnd": { "type": "integer" },
+        "paymentMethod": { "type": "string", "enum": ["agribank_vietqr", "napas_atm", "ewallet_qr"] },
+        "transferCode": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "caseSummary": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending_transfer", "submitted_receipt", "confirmed", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "packageId", "packageTitle", "amountVnd", "paymentMethod", "transferCode", "contactPhone", "caseSummary", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile and private notification/contact settings"
+    },
+    "/users/{userId}/consultations/{consultationId}": {
+      "schema": { "$ref": "#/entities/ConsultationSession" },
+      "description": "User's saved legal Q&A consultation sessions"
+    },
+    "/users/{userId}/consultations/{consultationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ConsultationMessage" },
+      "description": "Messages belonging to a legal consultation session"
+    },
+    "/users/{userId}/bookmarks/{bookmarkId}": {
+      "schema": { "$ref": "#/entities/LawBookmark" },
+      "description": "User's saved legal articles and documents"
+    },
+    "/users/{userId}/reminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/LegalReminder" },
+      "description": "User's legal reminders and scheduled appointments"
+    },
+    "/users/{userId}/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/ConsultationOrder" },
+      "description": "User's paid consultation package orders and transfer codes"
+    }
+  }
+}

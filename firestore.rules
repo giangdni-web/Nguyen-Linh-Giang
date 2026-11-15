@@ -1,0 +1,230 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidCategory(cat) {
+      return cat in ['civil', 'criminal', 'labor', 'enforcement', 'land', 'family', 'general'];
+    }
+
+    function isValidLawCategory(cat) {
+      return cat in ['civil', 'criminal', 'labor', 'enforcement', 'land', 'family'];
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.userId == userId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             data.email is string && data.email.size() <= 160 &&
+             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 25)) &&
+             data.notifyOnReply is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidConsultation(data, userId) {
+      return data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+             isValidCategory(data.category) &&
+             data.lastMessagePreview is string && data.lastMessagePreview.size() <= 300 &&
+             data.messageCount is int && data.messageCount >= 0 && data.messageCount <= 1000 &&
+             data.status in ['active', 'resolved'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidMessage(data, userId) {
+      return data.userId == userId &&
+             data.sender in ['user', 'advisor'] &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 12000 &&
+             (!('legalCitations' in data) || (data.legalCitations is string && data.legalCitations.size() <= 1000)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidBookmark(data, userId) {
+      return data.userId == userId &&
+             data.documentId is string && data.documentId.size() >= 1 && data.documentId.size() <= 80 &&
+             data.articleCode is string && data.articleCode.size() >= 1 && data.articleCode.size() <= 100 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+             isValidLawCategory(data.category) &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 500)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidReminder(data, userId) {
+      return data.userId == userId &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+             isValidCategory(data.category) &&
+             data.dueDateMillis is int && data.dueDateMillis > 0 &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 500)) &&
+             data.isCompleted is bool &&
+             data.notifyEnabled is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidOrder(data, userId) {
+      return data.userId == userId &&
+             data.packageId is string && data.packageId.size() >= 1 && data.packageId.size() <= 80 &&
+             data.packageTitle is string && data.packageTitle.size() >= 1 && data.packageTitle.size() <= 140 &&
+             data.amountVnd is int && data.amountVnd > 0 && data.amountVnd <= 500000000 &&
+             data.paymentMethod in ['agribank_vietqr', 'napas_atm', 'ewallet_qr'] &&
+             data.transferCode is string && data.transferCode.size() >= 4 && data.transferCode.size() <= 40 &&
+             data.contactPhone is string && data.contactPhone.size() <= 25 &&
+             data.caseSummary is string && data.caseSummary.size() >= 1 && data.caseSummary.size() <= 2000 &&
+             data.status in ['pending_transfer', 'submitted_receipt', 'confirmed', 'cancelled'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'email', 'notifyOnReply', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'email', 'phoneNumber', 'notifyOnReply', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phoneNumber', 'notifyOnReply', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /consultations/{consultationId} {
+        allow get: if isOwner(userId) && isValidId(consultationId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(consultationId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'category', 'lastMessagePreview', 'messageCount', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'category', 'lastMessagePreview', 'messageCount', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().status == 'active' &&
+                         isValidConsultation(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(consultationId) &&
+                         isValidConsultation(incoming(), userId) &&
+                         existing().status == 'active' &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           incoming().diff(existing()).affectedKeys().hasOnly(['title', 'lastMessagePreview', 'messageCount', 'updatedAt']) ||
+                           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+                         );
+
+        allow delete: if isOwner(userId) && isValidId(consultationId);
+
+        match /messages/{messageId} {
+          allow get: if isOwner(userId) && isValidId(consultationId) && isValidId(messageId);
+          allow list: if isOwner(userId) && isValidId(consultationId);
+
+          allow create: if isOwner(userId) &&
+                           isValidId(consultationId) &&
+                           isValidId(messageId) &&
+                           exists(/databases/$(database)/documents/users/$(userId)/consultations/$(consultationId)) &&
+                           incoming().keys().hasAll(['userId', 'sender', 'content', 'createdAt']) &&
+                           incoming().keys().hasOnly(['userId', 'sender', 'content', 'legalCitations', 'createdAt']) &&
+                           isValidMessage(incoming(), userId);
+
+          allow update: if false;
+          allow delete: if isOwner(userId) && isValidId(consultationId) && isValidId(messageId);
+        }
+      }
+
+      match /bookmarks/{bookmarkId} {
+        allow get: if isOwner(userId) && isValidId(bookmarkId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(bookmarkId) &&
+                         incoming().keys().hasAll(['userId', 'documentId', 'articleCode', 'title', 'category', 'createdAt']) &&
+                         incoming().keys().hasOnly(['userId', 'documentId', 'articleCode', 'title', 'category', 'note', 'createdAt']) &&
+                         isValidBookmark(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(bookmarkId) &&
+                         isValidBookmark(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().documentId == existing().documentId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['note']);
+
+        allow delete: if isOwner(userId) && isValidId(bookmarkId);
+      }
+
+      match /reminders/{reminderId} {
+        allow get: if isOwner(userId) && isValidId(reminderId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(reminderId) &&
+                         incoming().keys().hasAll(['userId', 'title', 'category', 'dueDateMillis', 'isCompleted', 'notifyEnabled', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'title', 'category', 'dueDateMillis', 'note', 'isCompleted', 'notifyEnabled', 'createdAt', 'updatedAt']) &&
+                         isValidReminder(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(reminderId) &&
+                         isValidReminder(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'dueDateMillis', 'note', 'isCompleted', 'notifyEnabled', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(reminderId);
+      }
+
+      match /orders/{orderId} {
+        allow get: if isOwner(userId) && isValidId(orderId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(orderId) &&
+                         incoming().keys().hasAll(['userId', 'packageId', 'packageTitle', 'amountVnd', 'paymentMethod', 'transferCode', 'contactPhone', 'caseSummary', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'packageId', 'packageTitle', 'amountVnd', 'paymentMethod', 'transferCode', 'contactPhone', 'caseSummary', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().status == 'pending_transfer' &&
+                         isValidOrder(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(orderId) &&
+                         isValidOrder(incoming(), userId) &&
+                         existing().status in ['pending_transfer', 'submitted_receipt'] &&
+                         incoming().status in ['submitted_receipt', 'cancelled'] &&
+                         incoming().userId == existing().userId &&
+                         incoming().packageId == existing().packageId &&
+                         incoming().amountVnd == existing().amountVnd &&
+                         incoming().transferCode == existing().transferCode &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+        allow delete: if false;
+      }
+    }
+  }
+}

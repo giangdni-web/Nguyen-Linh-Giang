@@ -1,0 +1,6 @@
+{
+  "name": "Mr.Giang Law",
+  "description": "Ứng dụng hỏi đáp, tra cứu văn bản pháp luật và tư vấn trực tuyến cùng Luật gia Nguyễn Linh Giang.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
