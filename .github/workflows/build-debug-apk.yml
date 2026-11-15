@@ -8,11 +8,8 @@ on:
       - '.github/workflows/build-debug-apk.yml'
       - 'app/**'
       - 'gradle/**'
-      - '*.gradle'
       - '*.gradle.kts'
       - 'gradle.properties'
-      - 'gradlew'
-      - 'gradlew.bat'
 
 permissions:
   contents: read
@@ -20,7 +17,6 @@ permissions:
 jobs:
   build-debug-apk:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -33,17 +29,29 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
-      - name: Install Android SDK
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools'
+      - name: Install Android SDK platform and build tools
+        run: sdkmanager 'platforms;android-36-ext1' 'build-tools;36.0.0'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Create debug signing key
+        run: |
+          keytool -genkeypair -v \
+            -keystore debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname 'CN=Android Debug,O=Android,C=US'
 
       - name: Build debug APK
-        run: |
-          chmod +x ./gradlew
-          ./gradlew --no-daemon --stacktrace assembleDebug
+        run: gradle --no-daemon --stacktrace assembleDebug
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
